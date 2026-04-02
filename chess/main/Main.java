@@ -57,7 +57,7 @@ public class Main {
 
     private void printMenu() {
         System.out.println();
-        System.out.println("Swiss-System Chess Tournament Simulator");
+        System.out.println("Round-Robin Chess Tournament Simulator");
         System.out.println("Players: " + players.size());
         System.out.println("1. Add player");
         System.out.println("2. Start tournament");
@@ -97,9 +97,9 @@ public class Main {
             throw new TournamentException("Add at least two players first.");
         }
         String name = readText("Tournament name: ");
-        int rounds = readInt("Number of rounds: ");
-        tournament.startTournament(name, rounds);
+        tournament.startTournament(name);
         System.out.println("Tournament started: " + tournament.getName());
+        System.out.println("Total rounds: " + tournament.getTotalRounds());
     }
 
     private void generatePairings() throws TournamentException {

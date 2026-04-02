@@ -10,40 +10,37 @@ import java.util.Comparator;
 import java.util.List;
 
 public class Tournament {
-    private final SwissPairing swissPairing;
+    private final RoundRobinScheduler roundRobinScheduler;
     private final List<Player> players;
     private final List<Match> currentPairings;
     private final List<Match> completedMatches;
+    private List<List<Match>> schedule;
     private String name;
     private int totalRounds;
     private int currentRound;
-    private int nextMatchNumber;
     private boolean started;
 
     public Tournament(List<Player> players) {
         this.players = players;
         this.currentPairings = new ArrayList<>();
         this.completedMatches = new ArrayList<>();
-        this.swissPairing = new SwissPairing();
-        this.nextMatchNumber = 1;
+        this.schedule = new ArrayList<>();
+        this.roundRobinScheduler = new RoundRobinScheduler();
     }
 
-    public void startTournament(String name, int totalRounds) throws TournamentException {
+    public void startTournament(String name) throws TournamentException {
         if (players.size() < 2) {
             throw new TournamentException("At least two players are required.");
         }
-        if (totalRounds <= 0) {
-            throw new TournamentException("Round count must be positive.");
-        }
         this.name = name;
-        this.totalRounds = totalRounds;
         this.currentRound = 0;
-        this.nextMatchNumber = 1;
         this.currentPairings.clear();
         this.completedMatches.clear();
         for (Player player : players) {
             player.resetTournamentData();
         }
+        this.schedule = roundRobinScheduler.createSchedule(players);
+        this.totalRounds = schedule.size();
         started = true;
     }
 
@@ -65,6 +62,10 @@ public class Tournament {
 
     public int getCurrentRound() {
         return currentRound;
+    }
+
+    public int getTotalRounds() {
+        return totalRounds;
     }
 
     public List<Player> getPlayers() {
@@ -89,10 +90,9 @@ public class Tournament {
         if (currentRound >= totalRounds) {
             throw new TournamentException("All rounds are already completed.");
         }
-        currentRound++;
         currentPairings.clear();
-        currentPairings.addAll(swissPairing.generatePairings(players, currentRound, nextMatchNumber));
-        nextMatchNumber += currentPairings.size();
+        currentPairings.addAll(schedule.get(currentRound));
+        currentRound++;
     }
 
     public void runCurrentRound() throws TournamentException {
