@@ -2,119 +2,176 @@ package chess.tournament;
 
 import chess.exceptions.TournamentException;
 import chess.matches.Match;
-import chess.matches.MatchPlayable;
-import chess.matches.MatchThread;
+import chess.matches.MatchRunnable;
 import chess.players.Player;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class Tournament {
-    private final String name;
-    private final int totalRounds;
-    private int roundsCompleted;
+    private final SwissPairing swissPairing;
     private final List<Player> players;
-    private final List<Round> rounds;
-    private final Scheduler scheduler;
-    private final Standings standings;
+    private final List<Match> currentPairings;
+    private final List<Match> completedMatches;
+    private String name;
+    private int totalRounds;
+    private int currentRound;
+    private int nextMatchNumber;
+    private boolean started;
 
-    public Tournament(String name, int totalRounds, List<Player> players) {
+    public Tournament(List<Player> players) {
+        this.players = players;
+        this.currentPairings = new ArrayList<>();
+        this.completedMatches = new ArrayList<>();
+        this.swissPairing = new SwissPairing();
+        this.nextMatchNumber = 1;
+    }
+
+    public void startTournament(String name, int totalRounds) throws TournamentException {
+        if (players.size() < 2) {
+            throw new TournamentException("At least two players are required.");
+        }
+        if (totalRounds <= 0) {
+            throw new TournamentException("Round count must be positive.");
+        }
         this.name = name;
         this.totalRounds = totalRounds;
-        this.players = players;
-        this.rounds = new ArrayList<>();
-        this.scheduler = new Scheduler();
-        this.standings = new Standings();
+        this.currentRound = 0;
+        this.nextMatchNumber = 1;
+        this.currentPairings.clear();
+        this.completedMatches.clear();
+        for (Player player : players) {
+            player.resetTournamentData();
+        }
+        started = true;
     }
 
     public String getName() {
         return name;
     }
 
-    public int getTotalRounds() {
-        return totalRounds;
+    public boolean hasStarted() {
+        return started;
     }
 
-    public int getRoundsCompleted() {
-        return roundsCompleted;
+    public boolean hasPendingRound() {
+        return !currentPairings.isEmpty();
+    }
+
+    public boolean isFinished() {
+        return started && currentRound >= totalRounds && currentPairings.isEmpty();
+    }
+
+    public int getCurrentRound() {
+        return currentRound;
     }
 
     public List<Player> getPlayers() {
         return players;
     }
 
-    public List<Round> getRounds() {
-        return rounds;
+    public List<Match> getCurrentPairings() {
+        return currentPairings;
     }
 
-    public void restoreRounds(List<Round> savedRounds, int savedRoundsCompleted) {
-        rounds.clear();
-        rounds.addAll(savedRounds);
-        this.roundsCompleted = savedRoundsCompleted;
+    public List<Match> getCompletedMatches() {
+        return completedMatches;
     }
 
-    public boolean isFinished() {
-        return roundsCompleted >= totalRounds;
-    }
-
-    public Round pairNextRound() throws TournamentException {
-        if (isFinished()) {
+    public void generateNextRound() throws TournamentException {
+        if (!started) {
+            throw new TournamentException("Start the tournament first.");
+        }
+        if (hasPendingRound()) {
+            throw new TournamentException("Run the current round before generating a new one.");
+        }
+        if (currentRound >= totalRounds) {
             throw new TournamentException("All rounds are already completed.");
         }
-        standings.refreshTieBreaks(players);
-        Round round = scheduler.createRound(roundsCompleted + 1, players);
-        rounds.add(round);
-        return round;
+        currentRound++;
+        currentPairings.clear();
+        currentPairings.addAll(swissPairing.generatePairings(players, currentRound, nextMatchNumber));
+        nextMatchNumber += currentPairings.size();
     }
 
-    public void simulateLatestRound() throws TournamentException {
-        if (rounds.isEmpty()) {
-            throw new TournamentException("No round is scheduled.");
+    public void runCurrentRound() throws TournamentException {
+        if (currentPairings.isEmpty()) {
+            throw new TournamentException("Generate pairings first.");
         }
-        Round current = rounds.get(rounds.size() - 1);
-        if (current.getRoundNumber() <= roundsCompleted) {
-            throw new TournamentException("The latest round has already been played.");
-        }
-        List<MatchThread> threads = new ArrayList<>();
-        int board = 1;
-        for (Match match : current.getMatches()) {
-            MatchPlayable playable = match;
-            MatchThread thread = new MatchThread(playable, "Round-" + current.getRoundNumber() + "-Board-" + board++);
+        List<Thread> threads = new ArrayList<>();
+        List<MatchRunnable> tasks = new ArrayList<>();
+        for (Match match : currentPairings) {
+            MatchRunnable task = new MatchRunnable(match);
+            Thread thread = new Thread(task, match.getMatchId());
+            tasks.add(task);
             threads.add(thread);
             thread.start();
         }
-        for (MatchThread thread : threads) {
+        for (int index = 0; index < threads.size(); index++) {
             try {
-                thread.join();
+                threads.get(index).join();
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                throw new TournamentException("Round simulation interrupted.");
+                throw new TournamentException("Round execution interrupted.", exception);
             }
-            if (thread.getFailure() != null) {
-                throw thread.getFailure();
+            if (tasks.get(index).getError() != null) {
+                throw tasks.get(index).getError();
             }
         }
-        roundsCompleted = current.getRoundNumber();
-        standings.refreshTieBreaks(players);
+        completedMatches.addAll(currentPairings);
+        currentPairings.clear();
     }
 
-    public String standingsTable() {
-        standings.refreshTieBreaks(players);
-        return standings.formatTable(players);
-    }
-
-    public String matchHistory() {
+    public String standingsText() {
+        List<Player> ranking = new ArrayList<>(players);
+        ranking.sort(Comparator.comparingDouble(Player::getScore).reversed()
+                .thenComparing(Comparator.comparingInt(Player::getWins).reversed())
+                .thenComparing(Comparator.comparingInt(Player::getRating).reversed())
+                .thenComparing(Player::getName));
         StringBuilder builder = new StringBuilder();
-        for (Round round : rounds) {
-            builder.append("Round ").append(round.getRoundNumber()).append(System.lineSeparator());
-            builder.append(String.format("%-8s %-18s %-18s %-10s%n", "Match", "White", "Black", "Result"));
-            for (Match match : round.getMatches()) {
-                builder.append(match.getDisplayLine()).append(System.lineSeparator());
-            }
-            builder.append(System.lineSeparator());
+        builder.append(String.format("%-5s %-20s %-8s %-8s %-8s %-8s %-8s%n",
+                "Rank", "Player", "Rating", "Score", "Wins", "Draws", "Losses"));
+        int rank = 1;
+        for (Player player : ranking) {
+            builder.append(String.format("%-5d %-20s %-8d %-8.1f %-8d %-8d %-8d%n",
+                    rank++,
+                    player.getName(),
+                    player.getRating(),
+                    player.getScore(),
+                    player.getWins(),
+                    player.getDraws(),
+                    player.getLosses()));
         }
-        if (builder.length() == 0) {
-            return "No matches have been played yet.";
+        return builder.toString();
+    }
+
+    public String currentPairingsText() {
+        if (currentPairings.isEmpty()) {
+            return "No pairings generated.";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(String.format("%-8s %-18s %-18s %-18s%n", "Match", "White", "Black", "Result"));
+        for (Match match : currentPairings) {
+            builder.append(match.getDisplayLine()).append(System.lineSeparator());
+        }
+        return builder.toString();
+    }
+
+    public String resultsText() {
+        if (completedMatches.isEmpty()) {
+            return "No results available.";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(String.format("%-8s %-8s %-18s %-18s %-18s%n", "Match", "Round", "White", "Black", "Result"));
+        for (Match match : completedMatches) {
+            String blackName = match.getBlackPlayer() == null ? "BYE" : match.getBlackPlayer().getName();
+            builder.append(String.format("%-8s %-8d %-18s %-18s %-18s%n",
+                    match.getMatchId(),
+                    match.getRoundNumber(),
+                    match.getWhitePlayer().getName(),
+                    blackName,
+                    match.getResult()));
         }
         return builder.toString();
     }

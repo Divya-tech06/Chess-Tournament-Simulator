@@ -1,9 +1,7 @@
 package chess.players;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class Player extends Person {
     private int rating;
@@ -11,16 +9,13 @@ public class Player extends Person {
     private int wins;
     private int losses;
     private int draws;
-    private double buchholz;
     private boolean byeReceived;
-    private final Set<String> opponents;
-    private final List<String> resultHistory;
+    private final List<String> opponents;
 
     public Player(String id, String name, int rating) {
         super(id, name);
         this.rating = rating;
-        this.opponents = new HashSet<>();
-        this.resultHistory = new ArrayList<>();
+        this.opponents = new ArrayList<>();
     }
 
     public int getRating() {
@@ -47,28 +42,36 @@ public class Player extends Person {
         return draws;
     }
 
-    public double getBuchholz() {
-        return buchholz;
-    }
-
-    public void setBuchholz(double buchholz) {
-        this.buchholz = buchholz;
-    }
-
     public boolean hasReceivedBye() {
         return byeReceived;
     }
 
-    public Set<String> getOpponents() {
+    public void setByeReceived(boolean byeReceived) {
+        this.byeReceived = byeReceived;
+    }
+
+    public List<String> getOpponents() {
         return opponents;
     }
 
-    public List<String> getResultHistory() {
-        return resultHistory;
+    public void setScore(double score) {
+        this.score = score;
+    }
+
+    public void setWins(int wins) {
+        this.wins = wins;
+    }
+
+    public void setLosses(int losses) {
+        this.losses = losses;
+    }
+
+    public void setDraws(int draws) {
+        this.draws = draws;
     }
 
     public void addOpponent(String opponentId) {
-        if (opponentId != null && !opponentId.isBlank()) {
+        if (opponentId != null && !opponentId.isBlank() && !opponents.contains(opponentId)) {
             opponents.add(opponentId);
         }
     }
@@ -77,28 +80,33 @@ public class Player extends Person {
         return opponents.contains(opponentId);
     }
 
-    public void recordWin(String summary) {
+    public void recordWin() {
         wins++;
         score += 1.0;
-        resultHistory.add(summary);
     }
 
-    public void recordLoss(String summary) {
+    public void recordLoss() {
         losses++;
-        resultHistory.add(summary);
     }
 
-    public void recordDraw(String summary) {
+    public void recordDraw() {
         draws++;
         score += 0.5;
-        resultHistory.add(summary);
     }
 
-    public void recordBye(String summary) {
+    public void recordBye() {
         byeReceived = true;
         wins++;
         score += 1.0;
-        resultHistory.add(summary);
+    }
+
+    public void resetTournamentData() {
+        score = 0.0;
+        wins = 0;
+        losses = 0;
+        draws = 0;
+        byeReceived = false;
+        opponents.clear();
     }
 
     public String toDataString() {
@@ -110,10 +118,8 @@ public class Player extends Person {
                 String.valueOf(wins),
                 String.valueOf(losses),
                 String.valueOf(draws),
-                String.valueOf(buchholz),
                 String.valueOf(byeReceived),
-                String.join(",", opponents),
-                String.join("~", resultHistory));
+                String.join(",", opponents));
     }
 
     public static Player fromDataString(String line) {
@@ -123,18 +129,13 @@ public class Player extends Person {
         player.wins = Integer.parseInt(parts[4]);
         player.losses = Integer.parseInt(parts[5]);
         player.draws = Integer.parseInt(parts[6]);
-        player.buchholz = Double.parseDouble(parts[7]);
-        player.byeReceived = Boolean.parseBoolean(parts[8]);
-        if (!parts[9].isBlank()) {
-            String[] rivalIds = parts[9].split(",");
+        int byeIndex = parts.length > 8 ? 8 : 7;
+        int opponentsIndex = parts.length > 9 ? 9 : 8;
+        player.byeReceived = Boolean.parseBoolean(parts[byeIndex]);
+        if (parts.length > opponentsIndex && !parts[opponentsIndex].isBlank()) {
+            String[] rivalIds = parts[opponentsIndex].split(",");
             for (String rivalId : rivalIds) {
-                player.opponents.add(rivalId);
-            }
-        }
-        if (parts.length > 10 && !parts[10].isBlank()) {
-            String[] history = parts[10].split("~");
-            for (String entry : history) {
-                player.resultHistory.add(entry);
+                player.addOpponent(rivalId);
             }
         }
         return player;
