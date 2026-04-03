@@ -40,12 +40,13 @@ public class Main {
             try {
                 switch (choice) {
                     case 1 -> addPlayer();
-                    case 2 -> startTournament();
-                    case 3 -> generatePairings();
-                    case 4 -> runMatches();
-                    case 5 -> viewStandings();
-                    case 6 -> saveData();
-                    case 7 -> running = false;
+                    case 2 -> printPlayers();
+                    case 3 -> startTournament();
+                    case 4 -> generatePairings();
+                    case 5 -> runMatches();
+                    case 6 -> viewStandings();
+                    case 7 -> saveData();
+                    case 8 -> running = false;
                     default -> System.out.println("Enter a valid option.");
                 }
             } catch (TournamentException exception) {
@@ -60,12 +61,13 @@ public class Main {
         System.out.println("Round-Robin Chess Tournament Simulator");
         System.out.println("Players: " + players.size());
         System.out.println("1. Add player");
-        System.out.println("2. Start tournament");
-        System.out.println("3. Generate pairings");
-        System.out.println("4. Run matches");
-        System.out.println("5. View standings");
-        System.out.println("6. Save data");
-        System.out.println("7. Exit");
+        System.out.println("2. Print players");
+        System.out.println("3. Start tournament");
+        System.out.println("4. Generate pairings");
+        System.out.println("5. Run matches");
+        System.out.println("6. View standings");
+        System.out.println("7. Save data");
+        System.out.println("8. Exit");
     }
 
     private void addPlayer() throws TournamentException {
@@ -121,6 +123,20 @@ public class Main {
 
     private void viewStandings() {
         System.out.println(tournament.standingsText());
+    }
+
+    private void printPlayers() {
+        if (players.isEmpty()) {
+            System.out.println("No players added.");
+            return;
+        }
+        System.out.printf("%-8s %-20s %-8s%n", "ID", "Name", "Rating");
+        for (Player player : players) {
+            System.out.printf("%-8s %-20s %-8d%n",
+                    player.getId(),
+                    player.getName(),
+                    player.getRating());
+        }
     }
 
     private void saveData() throws TournamentException {
